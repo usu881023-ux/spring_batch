@@ -1,0 +1,11 @@
+### 1. BatchScheduler 수동 실행
+POST http://localhost:8080/api/batch/run
+Content-Type: application/json
+
+###
+
+### 2. 배치 작업 상태 조회
+POST http://localhost:8080/api/batch/status
+Content-Type: application/json
+
+###

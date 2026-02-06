@@ -1,0 +1,1254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secta.hcbatch.mapper.OrderPrvaMaskMapper">
+
+    <!-- ===== 대상 주문 조회 ===== -->
+
+    <!-- 완료건 주문 목록 조회 (사용/취소/환불 완료) -->
+    <select id="selectOrderFnshList" parameterType="string" resultType="map">
+        <![CDATA[
+        SELECT DISTINCT PB.ORDER_NO
+             , PB.ORDER_CODE
+          FROM (
+            SELECT PA.ORDER_NO
+                 , PA.ORDER_CODE
+              FROM (
+                SELECT /*+ USE_NL(A B) INDEX(A T_HAPPYCON_COUPON_IDX6) */
+                       B.ORDER_NO
+                     , B.ORDER_CODE
+                     , (CASE WHEN B.ORDER_STATE IN ('19','91','72') THEN 0
+                             WHEN B.ORDER_STATE IN ('15','27','40') THEN (CASE WHEN A.CPN_STATE = 'N' OR (A.CPN_STATE ='E' AND A.CPN_TYPE = 'A' AND A.REM_AMT > 0) THEN 1 ELSE 0 END)
+                             ELSE 1 END) AS AVL_CNT
+                  FROM T_HAPPYCON_COUPON A
+                     , T_ORDER B
+                 WHERE A.ORDER_NO = B.ORDER_NO
+                   AND A.UPD_DATE >= TO_DATE(#{day},'YYYYMMDD')
+                   AND A.UPD_DATE <  TO_DATE(#{day},'YYYYMMDD') + 1
+                   AND A.ORDER_NO LIKE 'OR%'
+                   AND LENGTH(B.RCV_PHONE) <= 30
+                   ) PA
+             WHERE PA.AVL_CNT = 0
+             UNION ALL
+            SELECT PA.ORDER_NO
+                 , PA.ORDER_CODE
+              FROM (
+                SELECT /*+ USE_NL(A B C) INDEX(B T_HAPPYCON_COUPON_MULTI_IDX1) */
+                       A.ORDER_NO
+                     , A.ORDER_CODE
+                     , SUM(CASE WHEN A.ORDER_STATE IN ('19','91','72') THEN 0
+                                WHEN A.ORDER_STATE IN ('15','27','40') THEN (CASE WHEN C.CPN_STATE = 'N' OR (C.CPN_STATE ='E' AND C.CPN_TYPE = 'A' AND C.REM_AMT > 0) THEN 1 ELSE 0 END)
+                                ELSE 1 END) AS AVL_CNT
+                  FROM (
+                    SELECT /*+ USE_NL(IA IB IC) INDEX(IA T_HAPPYCON_COUPON_IDX6) */
+                           IC.ORDER_NO
+                         , IC.ORDER_CODE
+                         , IC.ORDER_STATE
+                      FROM T_HAPPYCON_COUPON IA
+                         , T_HAPPYCON_COUPON_MULTI IB
+                         , T_ORDER IC
+                     WHERE IA.ORDER_NO = IB.CPN_ORDER_NO
+                       AND IB.ORDER_NO = IC.ORDER_NO
+                       AND IA.UPD_DATE >= TO_DATE(#{day},'YYYYMMDD')
+                       AND IA.UPD_DATE <  TO_DATE(#{day},'YYYYMMDD') + 1
+                       AND IA.ORDER_NO NOT LIKE 'OR%'
+                       AND LENGTH(IC.RCV_PHONE) <= 30
+                     GROUP BY IC.ORDER_NO
+                         , IC.ORDER_CODE
+                         , IC.ORDER_STATE
+                       ) A
+                     , T_HAPPYCON_COUPON_MULTI B
+                     , T_HAPPYCON_COUPON C
+                 WHERE A.ORDER_NO = B.ORDER_NO
+                   AND B.CPN_ORDER_NO = C.ORDER_NO
+                 GROUP BY A.ORDER_NO
+                     , A.ORDER_CODE
+                   ) PA
+             WHERE PA.AVL_CNT = 0
+             UNION ALL
+            SELECT PA.ORDER_NO
+                 , PA.ORDER_CODE
+              FROM (
+                SELECT /*+ USE_NL(A B C) INDEX(A T_HAPPYCON_COUPON_IDX6) */
+                       C.ORDER_NO
+                     , C.ORDER_CODE
+                     , SUM(CASE WHEN C.ORDER_STATE IN ('19','91','72') THEN 0
+                                WHEN C.ORDER_STATE IN ('15','27','40') THEN (CASE WHEN A.CPN_STATE IS NULL OR A.CPN_STATE = 'Issued' THEN 1 ELSE 0 END)
+                                ELSE 1 END) AS AVL_CNT
+                  FROM T_OUTSIDE_COUPON A
+                     , T_OUTSIDE_OCCUR B
+                     , T_ORDER C
+                 WHERE A.OCCUR_CODE = B.OCCUR_CODE
+                   AND B.ORDER_NO = C.ORDER_NO
+                   AND A.UPD_DATE >= TO_DATE(#{day},'YYYYMMDD')
+                   AND A.UPD_DATE <  TO_DATE(#{day},'YYYYMMDD') + 1
+                   AND LENGTH(C.RCV_PHONE) <= 30
+                 GROUP BY C.ORDER_NO
+                     , C.ORDER_CODE
+                   ) PA
+             WHERE PA.AVL_CNT = 0
+               ) PB
+        ]]>
+    </select>
+
+    <!-- 미결재 취소건 주문 목록 조회 -->
+    <select id="selectOrderCnclList" parameterType="string" resultType="map">
+        <![CDATA[
+        SELECT DISTINCT PB.ORDER_NO
+             , PB.ORDER_CODE
+          FROM (
+            SELECT /*+ INDEX(A T_ORDER_IDX4) */
+                   A.ORDER_NO
+                 , A.ORDER_CODE
+              FROM T_ORDER A
+             WHERE A.ORDER_STATE = '00'
+               AND A.ORDER_DATE >= TO_DATE(#{day},'YYYYMMDD') - 2
+               AND A.ORDER_DATE <  TO_DATE(#{day},'YYYYMMDD') - 1
+               AND LENGTH(A.RCV_PHONE) <= 30
+               ) PB
+        ]]>
+    </select>
+
+    <!-- ===== 주문 테이블 처리 ===== -->
+
+    <!-- 주문 이관 테이블 MERGE -->
+    <update id="insertOrderTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_ORDER PA
+         USING (
+            SELECT A.*
+              FROM T_ORDER A
+             WHERE A.ORDER_CODE = #{orderCode}
+               ) PB
+            ON (PA.ORDER_CODE = PB.ORDER_CODE)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.USER_BIRTH_DT = PB.USER_BIRTH_DT
+                    , PA.USER_NAME = PB.USER_NAME
+                    , PA.USER_PHONE = PB.USER_PHONE
+                    , PA.USER_ADDR = PB.USER_ADDR
+                    , PA.USER_ADDR_DTL = PB.USER_ADDR_DTL
+                    , PA.USER_EMAIL = PB.USER_EMAIL
+                    , PA.RCV_NAME = PB.RCV_NAME
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.RCV_ADDR = PB.RCV_ADDR
+                    , PA.RCV_ADDR_DTL = PB.RCV_ADDR_DTL
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.ORDER_CODE
+                    , PA.USER_ID
+                    , PA.ORDER_NO
+                    , PA.PAY_MTHD
+                    , PA.ORDER_DATE
+                    , PA.ORDER_STATE
+                    , PA.CART_YN
+                    , PA.CART_NO
+                    , PA.GOODS_NAME
+                    , PA.TOT_GOODS_CNT
+                    , PA.TOT_GOODS_QTY
+                    , PA.TOT_AMT
+                    , PA.TOT_USE_PT
+                    , PA.TOT_USER_OFF_AMT
+                    , PA.TOT_EVENT_OFF_AMT
+                    , PA.TOT_CPN_OFF_AMT
+                    , PA.TOT_PACK_FEE
+                    , PA.PAY_AMT
+                    , PA.TOT_SPLY_AMT
+                    , PA.TOT_STRT_AMT
+                    , PA.TOT_DSCT_AMT
+                    , PA.TOT_RESV_PT
+                    , PA.TOT_RESV_YN
+                    , PA.ORDER_TYPE
+                    , PA.PACK_TYPE
+                    , PA.RSV_TYPE
+                    , PA.RSV_DT
+                    , PA.RSV_HR
+                    , PA.PAY_DTM
+                    , PA.PAY_RPS_CD
+                    , PA.PAY_APRV_NO
+                    , PA.PAY_CODE
+                    , PA.PAY_PG_CODE
+                    , PA.PAY_REQ_CODE
+                    , PA.PCARD_NO
+                    , PA.PCARD_DTM
+                    , PA.SPAY_TOKEN
+                    , PA.GIFT_AUTH_NO
+                    , PA.GIFT_AUTH_ERR_CNT
+                    , PA.PT_CARD_NO
+                    , PA.PT_TRX_CD
+                    , PA.PT_TRX_DV_CD
+                    , PA.PT_TRX_PT
+                    , PA.PT_APRV_DT
+                    , PA.PT_APRV_NO
+                    , PA.PT_RPS_CD
+                    , PA.USER_LEVEL
+                    , PA.USER_SEX
+                    , PA.USER_AGE
+                    , PA.USER_BIRTH_DT
+                    , PA.USER_NAME
+                    , PA.USER_PHONE
+                    , PA.USER_POST
+                    , PA.USER_ADDR
+                    , PA.USER_ADDR_DTL
+                    , PA.USER_EMAIL
+                    , PA.USER_INFO_SYNC_YN
+                    , PA.RCV_NAME
+                    , PA.RCV_PHONE
+                    , PA.RCV_POST
+                    , PA.RCV_ADDR
+                    , PA.RCV_ADDR_DTL
+                    , PA.ORDER_MEMO
+                    , PA.PACK_DATE
+                    , PA.SEND_DATE
+                    , PA.CNFM_DATE
+                    , PA.CNCL_YN
+                    , PA.CNCL_DATE
+                    , PA.CNCL_REASON
+                    , PA.SEND_TYPE
+                    , PA.TMLT_CODE
+                    , PA.SEND_MMS_IMG_PATH
+                    , PA.SEND_MSG
+                    , PA.SEND_THUM_IMG_URL
+                    , PA.SEND_MEMO
+                    , PA.MTPL_SEND_YN
+                    , PA.CAMP_YN
+                    , PA.CAMP_CODE
+                    , PA.CLOS_CODE
+                    , PA.NOML_CPN_OFF_AMT
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.ORDER_CODE
+                    , PB.USER_ID
+                    , PB.ORDER_NO
+                    , PB.PAY_MTHD
+                    , PB.ORDER_DATE
+                    , PB.ORDER_STATE
+                    , PB.CART_YN
+                    , PB.CART_NO
+                    , PB.GOODS_NAME
+                    , PB.TOT_GOODS_CNT
+                    , PB.TOT_GOODS_QTY
+                    , PB.TOT_AMT
+                    , PB.TOT_USE_PT
+                    , PB.TOT_USER_OFF_AMT
+                    , PB.TOT_EVENT_OFF_AMT
+                    , PB.TOT_CPN_OFF_AMT
+                    , PB.TOT_PACK_FEE
+                    , PB.PAY_AMT
+                    , PB.TOT_SPLY_AMT
+                    , PB.TOT_STRT_AMT
+                    , PB.TOT_DSCT_AMT
+                    , PB.TOT_RESV_PT
+                    , PB.TOT_RESV_YN
+                    , PB.ORDER_TYPE
+                    , PB.PACK_TYPE
+                    , PB.RSV_TYPE
+                    , PB.RSV_DT
+                    , PB.RSV_HR
+                    , PB.PAY_DTM
+                    , PB.PAY_RPS_CD
+                    , PB.PAY_APRV_NO
+                    , PB.PAY_CODE
+                    , PB.PAY_PG_CODE
+                    , PB.PAY_REQ_CODE
+                    , PB.PCARD_NO
+                    , PB.PCARD_DTM
+                    , PB.SPAY_TOKEN
+                    , PB.GIFT_AUTH_NO
+                    , PB.GIFT_AUTH_ERR_CNT
+                    , PB.PT_CARD_NO
+                    , PB.PT_TRX_CD
+                    , PB.PT_TRX_DV_CD
+                    , PB.PT_TRX_PT
+                    , PB.PT_APRV_DT
+                    , PB.PT_APRV_NO
+                    , PB.PT_RPS_CD
+                    , PB.USER_LEVEL
+                    , PB.USER_SEX
+                    , PB.USER_AGE
+                    , PB.USER_BIRTH_DT
+                    , PB.USER_NAME
+                    , PB.USER_PHONE
+                    , PB.USER_POST
+                    , PB.USER_ADDR
+                    , PB.USER_ADDR_DTL
+                    , PB.USER_EMAIL
+                    , PB.USER_INFO_SYNC_YN
+                    , PB.RCV_NAME
+                    , PB.RCV_PHONE
+                    , PB.RCV_POST
+                    , PB.RCV_ADDR
+                    , PB.RCV_ADDR_DTL
+                    , PB.ORDER_MEMO
+                    , PB.PACK_DATE
+                    , PB.SEND_DATE
+                    , PB.CNFM_DATE
+                    , PB.CNCL_YN
+                    , PB.CNCL_DATE
+                    , PB.CNCL_REASON
+                    , PB.SEND_TYPE
+                    , PB.TMLT_CODE
+                    , PB.SEND_MMS_IMG_PATH
+                    , PB.SEND_MSG
+                    , PB.SEND_THUM_IMG_URL
+                    , PB.SEND_MEMO
+                    , PB.MTPL_SEND_YN
+                    , PB.CAMP_YN
+                    , PB.CAMP_CODE
+                    , PB.CLOS_CODE
+                    , PB.NOML_CPN_OFF_AMT
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 주문 마스킹 UPDATE -->
+    <update id="updateOrderMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_ORDER A
+           SET A.USER_BIRTH_DT = SUBSTR(A.USER_BIRTH_DT,1,2) || LPAD('*', LENGTH(A.USER_BIRTH_DT) - 2,'*')
+             , A.USER_NAME = SUBSTR(A.USER_NAME,1,1) || LPAD('*', LENGTH(A.USER_NAME) - 1,'*')
+             , A.USER_PHONE = (CASE WHEN TRIM(REPLACE(A.USER_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.USER_PHONE,'-',''),'SHA256')) ELSE ' ' END)
+             , A.USER_ADDR = SUBSTR(A.USER_ADDR,1,LENGTH(A.USER_ADDR) - 15) || LPAD('*',15,'*')
+             , A.USER_ADDR_DTL = SUBSTR(A.USER_ADDR_DTL,1,LENGTH(A.USER_ADDR_DTL) - 10) || LPAD('*',10,'*')
+             , A.USER_EMAIL = RPAD(SUBSTR(A.USER_EMAIL,1,1), INSTR(A.USER_EMAIL,'@') - 2,'*') || SUBSTR(A.USER_EMAIL,INSTR(A.USER_EMAIL,'@') - 1)
+             , A.RCV_NAME = SUBSTR(A.RCV_NAME,1,1) || LPAD('*', LENGTH(A.RCV_NAME) - 1,'*')
+             , A.RCV_PHONE = (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END)
+             , A.RCV_ADDR = SUBSTR(A.RCV_ADDR,1,LENGTH(A.RCV_ADDR) - 15) || LPAD('*',15,'*')
+             , A.RCV_ADDR_DTL = SUBSTR(A.RCV_ADDR_DTL,1,LENGTH(A.RCV_ADDR_DTL) - 10) || LPAD('*',10,'*')
+         WHERE A.ORDER_CODE = #{orderCode}
+        ]]>
+    </update>
+
+    <!-- ===== 장바구니 테이블 처리 ===== -->
+
+    <!-- 장바구니 이관 테이블 MERGE -->
+    <update id="insertCartTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_ORDER_BASKET PA
+         USING (
+            SELECT A.*
+              FROM T_ORDER_BASKET A
+             WHERE A.ORDER_CODE = #{orderCode}
+               ) PB
+            ON (PA.ORDER_CODE = PB.ORDER_CODE)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.USER_BIRTH_DT = PB.USER_BIRTH_DT
+                    , PA.USER_NAME = PB.USER_NAME
+                    , PA.USER_PHONE = PB.USER_PHONE
+                    , PA.USER_ADDR = PB.USER_ADDR
+                    , PA.USER_ADDR_DTL = PB.USER_ADDR_DTL
+                    , PA.USER_EMAIL = PB.USER_EMAIL
+                    , PA.RCV_NAME = PB.RCV_NAME
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.RCV_ADDR = PB.RCV_ADDR
+                    , PA.RCV_ADDR_DTL = PB.RCV_ADDR_DTL
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.ORDER_CODE
+                    , PA.USER_ID
+                    , PA.CART_NO
+                    , PA.PAY_MTHD
+                    , PA.ORDER_DATE
+                    , PA.ORDER_STATE
+                    , PA.GOODS_NAME
+                    , PA.TOT_GOODS_CNT
+                    , PA.TOT_GOODS_QTY
+                    , PA.TOT_AMT
+                    , PA.TOT_USE_PT
+                    , PA.TOT_USER_OFF_AMT
+                    , PA.TOT_EVENT_OFF_AMT
+                    , PA.TOT_CPN_OFF_AMT
+                    , PA.TOT_PACK_FEE
+                    , PA.PAY_AMT
+                    , PA.TOT_SPLY_AMT
+                    , PA.TOT_STRT_AMT
+                    , PA.TOT_DSCT_AMT
+                    , PA.TOT_RESV_PT
+                    , PA.TOT_RESV_YN
+                    , PA.ORDER_TYPE
+                    , PA.PACK_TYPE
+                    , PA.RSV_TYPE
+                    , PA.RSV_DT
+                    , PA.RSV_HR
+                    , PA.PAY_DTM
+                    , PA.PAY_RPS_CD
+                    , PA.PAY_APRV_NO
+                    , PA.PAY_CODE
+                    , PA.PAY_PG_CODE
+                    , PA.PAY_REQ_CODE
+                    , PA.PCARD_NO
+                    , PA.PCARD_DTM
+                    , PA.PT_CARD_NO
+                    , PA.PT_TRX_CD
+                    , PA.PT_TRX_DV_CD
+                    , PA.PT_TRX_PT
+                    , PA.PT_APRV_DT
+                    , PA.PT_APRV_NO
+                    , PA.PT_RPS_CD
+                    , PA.USER_LEVEL
+                    , PA.USER_SEX
+                    , PA.USER_AGE
+                    , PA.USER_BIRTH_DT
+                    , PA.USER_NAME
+                    , PA.USER_PHONE
+                    , PA.USER_POST
+                    , PA.USER_ADDR
+                    , PA.USER_ADDR_DTL
+                    , PA.USER_EMAIL
+                    , PA.RCV_NAME
+                    , PA.RCV_PHONE
+                    , PA.RCV_POST
+                    , PA.RCV_ADDR
+                    , PA.RCV_ADDR_DTL
+                    , PA.ORDER_MEMO
+                    , PA.PACK_DATE
+                    , PA.SEND_DATE
+                    , PA.CNFM_DATE
+                    , PA.CNCL_YN
+                    , PA.CNCL_DATE
+                    , PA.CNCL_REASON
+                    , PA.SEND_TYPE
+                    , PA.SEND_MMS_IMG_PATH
+                    , PA.SEND_MSG
+                    , PA.MTPL_SEND_YN
+                    , PA.CAMP_YN
+                    , PA.CLOS_CODE
+                    , PA.NOML_CPN_OFF_AMT
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.ORDER_CODE
+                    , PB.USER_ID
+                    , PB.CART_NO
+                    , PB.PAY_MTHD
+                    , PB.ORDER_DATE
+                    , PB.ORDER_STATE
+                    , PB.GOODS_NAME
+                    , PB.TOT_GOODS_CNT
+                    , PB.TOT_GOODS_QTY
+                    , PB.TOT_AMT
+                    , PB.TOT_USE_PT
+                    , PB.TOT_USER_OFF_AMT
+                    , PB.TOT_EVENT_OFF_AMT
+                    , PB.TOT_CPN_OFF_AMT
+                    , PB.TOT_PACK_FEE
+                    , PB.PAY_AMT
+                    , PB.TOT_SPLY_AMT
+                    , PB.TOT_STRT_AMT
+                    , PB.TOT_DSCT_AMT
+                    , PB.TOT_RESV_PT
+                    , PB.TOT_RESV_YN
+                    , PB.ORDER_TYPE
+                    , PB.PACK_TYPE
+                    , PB.RSV_TYPE
+                    , PB.RSV_DT
+                    , PB.RSV_HR
+                    , PB.PAY_DTM
+                    , PB.PAY_RPS_CD
+                    , PB.PAY_APRV_NO
+                    , PB.PAY_CODE
+                    , PB.PAY_PG_CODE
+                    , PB.PAY_REQ_CODE
+                    , PB.PCARD_NO
+                    , PB.PCARD_DTM
+                    , PB.PT_CARD_NO
+                    , PB.PT_TRX_CD
+                    , PB.PT_TRX_DV_CD
+                    , PB.PT_TRX_PT
+                    , PB.PT_APRV_DT
+                    , PB.PT_APRV_NO
+                    , PB.PT_RPS_CD
+                    , PB.USER_LEVEL
+                    , PB.USER_SEX
+                    , PB.USER_AGE
+                    , PB.USER_BIRTH_DT
+                    , PB.USER_NAME
+                    , PB.USER_PHONE
+                    , PB.USER_POST
+                    , PB.USER_ADDR
+                    , PB.USER_ADDR_DTL
+                    , PB.USER_EMAIL
+                    , PB.RCV_NAME
+                    , PB.RCV_PHONE
+                    , PB.RCV_POST
+                    , PB.RCV_ADDR
+                    , PB.RCV_ADDR_DTL
+                    , PB.ORDER_MEMO
+                    , PB.PACK_DATE
+                    , PB.SEND_DATE
+                    , PB.CNFM_DATE
+                    , PB.CNCL_YN
+                    , PB.CNCL_DATE
+                    , PB.CNCL_REASON
+                    , PB.SEND_TYPE
+                    , PB.SEND_MMS_IMG_PATH
+                    , PB.SEND_MSG
+                    , PB.MTPL_SEND_YN
+                    , PB.CAMP_YN
+                    , PB.CLOS_CODE
+                    , PB.NOML_CPN_OFF_AMT
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 장바구니 마스킹 UPDATE -->
+    <update id="updateCartMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_ORDER_BASKET A
+           SET A.USER_BIRTH_DT = SUBSTR(A.USER_BIRTH_DT,1,2) || LPAD('*', LENGTH(A.USER_BIRTH_DT) - 2,'*')
+             , A.USER_NAME = SUBSTR(A.USER_NAME,1,1) || LPAD('*', LENGTH(A.USER_NAME) - 1,'*')
+             , A.USER_PHONE = (CASE WHEN TRIM(REPLACE(A.USER_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.USER_PHONE,'-',''),'SHA256')) ELSE ' ' END)
+             , A.USER_ADDR = SUBSTR(A.USER_ADDR,1,LENGTH(A.USER_ADDR) - 15) || LPAD('*',15,'*')
+             , A.USER_ADDR_DTL = SUBSTR(A.USER_ADDR_DTL,1,LENGTH(A.USER_ADDR_DTL) - 10) || LPAD('*',10,'*')
+             , A.USER_EMAIL = RPAD(SUBSTR(A.USER_EMAIL,1,1), INSTR(A.USER_EMAIL,'@') - 2,'*') || SUBSTR(A.USER_EMAIL,INSTR(A.USER_EMAIL,'@') - 1)
+             , A.RCV_NAME = SUBSTR(A.RCV_NAME,1,1) || LPAD('*', LENGTH(A.RCV_NAME) - 1,'*')
+             , A.RCV_PHONE = (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END)
+             , A.RCV_ADDR = SUBSTR(A.RCV_ADDR,1,LENGTH(A.RCV_ADDR) - 15) || LPAD('*',15,'*')
+             , A.RCV_ADDR_DTL = SUBSTR(A.RCV_ADDR_DTL,1,LENGTH(A.RCV_ADDR_DTL) - 10) || LPAD('*',10,'*')
+         WHERE A.ORDER_CODE = #{orderCode}
+        ]]>
+    </update>
+
+    <!-- ===== 주문배송 테이블 처리 ===== -->
+
+    <!-- 주문배송 이관 테이블 MERGE -->
+    <update id="insertOrderDelvTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_ORDER_DELIVERY PA
+         USING (
+            SELECT A.*
+              FROM T_ORDER_DELIVERY A
+             WHERE A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.ORDER_NO = PB.ORDER_NO)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_NAME = PB.RCV_NAME
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.RCV_ADDR = PB.RCV_ADDR
+                    , PA.RCV_ADDR_DTL = PB.RCV_ADDR_DTL
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.ORDER_NO
+                    , PA.ORDER_CODE
+                    , PA.ORDER_INFO_CODE
+                    , PA.PACK_CODE
+                    , PA.USER_ID
+                    , PA.ORDER_SUB_NO
+                    , PA.PACK_STATE
+                    , PA.PACK_COMP
+                    , PA.PACK_NO
+                    , PA.RCV_NAME
+                    , PA.RCV_PHONE
+                    , PA.RCV_POST
+                    , PA.RCV_ADDR
+                    , PA.RCV_ADDR_DTL
+                    , PA.PACK_MEMO
+                    , PA.DEL_YN
+                    , PA.SEND_DATE
+                    , PA.PACK_DATE
+                    , PA.OLD_ORDER_UK
+                    , PA.SMS_RETRY_DATE
+                    , PA.SMS_RETRY_CNT
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.ORDER_NO
+                    , PB.ORDER_CODE
+                    , PB.ORDER_INFO_CODE
+                    , PB.PACK_CODE
+                    , PB.USER_ID
+                    , PB.ORDER_SUB_NO
+                    , PB.PACK_STATE
+                    , PB.PACK_COMP
+                    , PB.PACK_NO
+                    , PB.RCV_NAME
+                    , PB.RCV_PHONE
+                    , PB.RCV_POST
+                    , PB.RCV_ADDR
+                    , PB.RCV_ADDR_DTL
+                    , PB.PACK_MEMO
+                    , PB.DEL_YN
+                    , PB.SEND_DATE
+                    , PB.PACK_DATE
+                    , PB.OLD_ORDER_UK
+                    , PB.SMS_RETRY_DATE
+                    , PB.SMS_RETRY_CNT
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 주문배송 마스킹 UPDATE -->
+    <update id="updateOrderDelvMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_ORDER_DELIVERY A
+           SET A.RCV_NAME = SUBSTR(A.RCV_NAME,1,1) || LPAD('*', LENGTH(A.RCV_NAME) - 1,'*')
+             , A.RCV_PHONE = (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END)
+             , A.RCV_ADDR = SUBSTR(A.RCV_ADDR,1,LENGTH(A.RCV_ADDR) - 15) || LPAD('*',15,'*')
+             , A.RCV_ADDR_DTL = SUBSTR(A.RCV_ADDR_DTL,1,LENGTH(A.RCV_ADDR_DTL) - 10) || LPAD('*',10,'*')
+         WHERE A.ORDER_NO = #{orderNo}
+        ]]>
+    </update>
+
+    <!-- ===== 외부쿠폰 MMS 테이블 처리 ===== -->
+
+    <!-- 외부쿠폰 MMS 이관 테이블 MERGE -->
+    <update id="insertCpnInfoTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_OUTSIDE_MMS PA
+         USING (
+            SELECT /*+ USE_NL(A B C) */
+                   C.*
+              FROM T_OUTSIDE_OCCUR A
+                 , T_OUTSIDE_COUPON B
+                 , T_OUTSIDE_MMS C
+             WHERE A.OCCUR_CODE = B.OCCUR_CODE
+               AND B.CPN_NO = C.CPN_NO
+               AND A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.MMS_CODE = PB.MMS_CODE)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.USER_PHONE = PB.USER_PHONE
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.MMS_CODE
+                    , PA.CPN_NO
+                    , PA.USER_PHONE
+                    , PA.RCV_PHONE
+                    , PA.SEND_SUBJ
+                    , PA.SEND_CTT
+                    , PA.RPS_CD
+                    , PA.RPS_MSG
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.MMS_CODE
+                    , PB.CPN_NO
+                    , PB.USER_PHONE
+                    , PB.RCV_PHONE
+                    , PB.SEND_SUBJ
+                    , PB.SEND_CTT
+                    , PB.RPS_CD
+                    , PB.RPS_MSG
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 외부쿠폰 MMS 마스킹 UPDATE -->
+    <update id="updateCpnInfoMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_OUTSIDE_MMS A
+           SET A.USER_PHONE = (CASE WHEN LENGTH(A.USER_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.USER_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.USER_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.USER_PHONE END)
+             , A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.MMS_CODE IN (
+            SELECT /*+ USE_NL(IA IB IC) */
+                   IC.MMS_CODE
+              FROM T_OUTSIDE_OCCUR IA
+                 , T_OUTSIDE_COUPON IB
+                 , T_OUTSIDE_MMS IC
+             WHERE IA.OCCUR_CODE = IB.OCCUR_CODE
+               AND IB.CPN_NO = IC.CPN_NO
+               AND IA.ORDER_NO = #{orderNo}
+               )
+        ]]>
+    </update>
+
+    <!-- ===== 환불계좌정보 테이블 처리 ===== -->
+
+    <!-- 환불계좌정보 이관 테이블 MERGE -->
+    <update id="insertRefundTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_REFUND_ACC_INFO PA
+         USING (
+            SELECT A.*
+              FROM T_REFUND_ACC_INFO A
+             WHERE A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.ACC_NO = (CASE WHEN REGEXP_LIKE(TRIM(REPLACE(PB.ACC_NO,'-','')),'[^0-9]') OR TRIM(PB.ACC_NO) IS NULL THEN PB.ACC_NO ELSE MIG_CRYPTO.ENCRYPT('YwhcdktWPDeztoJlNv0rjOQFU7bfcKp3','H7DRWbABL42663Lb',REPLACE(PB.ACC_NO,'-','')) END)
+                    , PA.ACC_NAME = PB.ACC_NAME
+                    , PA.ACC_PHONE = PB.ACC_PHONE
+                WHERE TRIM(PB.ACC_NO) IS NOT NULL
+                  AND LENGTH(PB.ACC_PHONE) <= 30
+                  AND PB.ACC_NO NOT LIKE '***%'
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.SEQ
+                    , PA.ORDER_NO
+                    , PA.CPN_ORDER_NO
+                    , PA.BANK_CODE
+                    , PA.ACC_NO
+                    , PA.ACC_NAME
+                    , PA.ACC_PHONE
+                    , PA.REQ_TYPE
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.SEQ
+                    , PB.ORDER_NO
+                    , PB.CPN_ORDER_NO
+                    , PB.BANK_CODE
+                    , PB.ACC_NO
+                    , PB.ACC_NAME
+                    , PB.ACC_PHONE
+                    , PB.REQ_TYPE
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 환불계좌정보 마스킹 MERGE -->
+    <update id="updateRefundMask" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_REFUND_ACC_INFO PA
+         USING (
+            SELECT A.SEQ
+                 , (CASE WHEN REGEXP_LIKE(A.ACC_NO,'[^0-9]') THEN REPLACE(MIG_CRYPTO.DECRYPT('YwhcdktWPDeztoJlNv0rjOQFU7bfcKp3','H7DRWbABL42663Lb',A.ACC_NO),'-','') ELSE A.ACC_NO END) AS ACC_NO
+                 , SUBSTR(A.ACC_NAME,1,1) || LPAD('*', LENGTH(A.ACC_NAME) - 1,'*') AS ACC_NAME
+                 , (CASE WHEN TRIM(REPLACE(A.ACC_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.ACC_PHONE,'-',''),'SHA256')) ELSE ' ' END) AS ACC_PHONE
+              FROM T_REFUND_ACC_INFO A
+             WHERE A.ORDER_NO = #{orderNo}
+               AND LENGTH(A.ACC_PHONE) <= 30
+               AND TRIM(A.ACC_NO) IS NOT NULL
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.ACC_NO = LPAD('*',LENGTH(REPLACE(PB.ACC_NO,'-','')) - 4,'*') || SUBSTR(REPLACE(PA.ACC_NO,'-',''),LENGTH(REPLACE(PA.ACC_NO,'-','')) - 3)
+                    , PA.ACC_NAME = PB.ACC_NAME
+                    , PA.ACC_PHONE = PB.ACC_PHONE
+        ]]>
+    </update>
+
+    <!-- ===== 환불입금로그 테이블 처리 ===== -->
+
+    <!-- 환불입금로그 이관 테이블 MERGE -->
+    <update id="insertRefundHstTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_REFUND_IN_LOG PA
+         USING (
+            SELECT /*+ USE_NL(A B) */
+                   B.*
+              FROM T_REFUND_ACC_INFO A
+                 , T_REFUND_IN_LOG B
+             WHERE A.SEQ = B.ACC_SEQ
+               AND A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.SEQ
+                    , PA.ACC_SEQ
+                    , PA.RCV_PHONE
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.SEQ
+                    , PB.ACC_SEQ
+                    , PB.RCV_PHONE
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 환불입금로그 마스킹 UPDATE -->
+    <update id="updateRefundHstMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_REFUND_IN_LOG A
+           SET A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.ACC_SEQ IN (
+            SELECT IA.SEQ
+              FROM T_REFUND_ACC_INFO IA
+             WHERE IA.ORDER_NO = #{orderNo}
+               )
+        ]]>
+    </update>
+
+    <!-- ===== 해피콘쿠폰 테이블 처리 ===== -->
+
+    <!-- 해피콘쿠폰 이관 테이블 MERGE -->
+    <update id="insertHconInfoTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_HAPPYCON_COUPON PA
+         USING (
+            SELECT A.*
+              FROM T_HAPPYCON_COUPON A
+             WHERE A.ORDER_NO = #{orderNo}
+             UNION ALL
+            SELECT /*+ USE_NL(A B) */
+                   B.*
+              FROM T_HAPPYCON_COUPON_MULTI A
+                 , T_HAPPYCON_COUPON B
+             WHERE A.CPN_ORDER_NO = B.ORDER_NO
+               AND A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.CPN_SEQ = PB.CPN_SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_NAME = PB.RCV_NAME
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.CPN_SEQ
+                    , PA.UUID
+                    , PA.USER_ID
+                    , PA.ORDER_NO
+                    , PA.ORDER_SUB_NO
+                    , PA.HC_SELL_CODE
+                    , PA.HC_SELL_NAME
+                    , PA.RCV_NAME
+                    , PA.RCV_PHONE
+                    , PA.CPN_NO
+                    , PA.CPN_TYPE
+                    , PA.AVL_STA_DT
+                    , PA.AVL_END_DT
+                    , PA.SALE_AMT
+                    , PA.PAY_AMT
+                    , PA.CPN_STATE
+                    , PA.CPN_AMT
+                    , PA.REM_AMT
+                    , PA.USE_TYPE
+                    , PA.TRX_AMT
+                    , PA.TRX_NO
+                    , PA.ORGL_TRX_NO
+                    , PA.USE_DTM
+                    , PA.BRAND_CODE
+                    , PA.STORE_CODE
+                    , PA.STORE_NAME
+                    , PA.RFND_AMT
+                    , PA.RETRY_CNT
+                    , PA.EXTN_YN
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.CPN_SEQ
+                    , PB.UUID
+                    , PB.USER_ID
+                    , PB.ORDER_NO
+                    , PB.ORDER_SUB_NO
+                    , PB.HC_SELL_CODE
+                    , PB.HC_SELL_NAME
+                    , PB.RCV_NAME
+                    , PB.RCV_PHONE
+                    , PB.CPN_NO
+                    , PB.CPN_TYPE
+                    , PB.AVL_STA_DT
+                    , PB.AVL_END_DT
+                    , PB.SALE_AMT
+                    , PB.PAY_AMT
+                    , PB.CPN_STATE
+                    , PB.CPN_AMT
+                    , PB.REM_AMT
+                    , PB.USE_TYPE
+                    , PB.TRX_AMT
+                    , PB.TRX_NO
+                    , PB.ORGL_TRX_NO
+                    , PB.USE_DTM
+                    , PB.BRAND_CODE
+                    , PB.STORE_CODE
+                    , PB.STORE_NAME
+                    , PB.RFND_AMT
+                    , PB.RETRY_CNT
+                    , PB.EXTN_YN
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 해피콘쿠폰 마스킹 UPDATE -->
+    <update id="updateHconInfoMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_HAPPYCON_COUPON A
+           SET A.RCV_NAME = (CASE WHEN LENGTH(A.RCV_NAME) <= 30 THEN (CASE WHEN TRIM(A.RCV_NAME) IS NOT NULL THEN SUBSTR(A.RCV_NAME,1,1) || LPAD('*', LENGTH(A.RCV_NAME) - 1,'*') ELSE '' END) ELSE A.RCV_NAME END)
+             , A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.ORDER_NO IN (
+            SELECT A.ORDER_NO
+              FROM T_HAPPYCON_COUPON A
+             WHERE A.ORDER_NO = #{orderNo}
+             UNION ALL
+            SELECT /*+ USE_NL(A B) */
+                   B.ORDER_NO
+              FROM T_HAPPYCON_COUPON_MULTI A
+                 , T_HAPPYCON_COUPON B
+             WHERE A.CPN_ORDER_NO = B.ORDER_NO
+               AND A.ORDER_NO = #{orderNo}
+               )
+        ]]>
+    </update>
+
+    <!-- ===== 해피콘복수발송 테이블 처리 ===== -->
+
+    <!-- 해피콘복수발송 이관 테이블 MERGE -->
+    <update id="insertHconMultiTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_HAPPYCON_COUPON_MULTI PA
+         USING (
+            SELECT A.*
+              FROM T_HAPPYCON_COUPON_MULTI A
+             WHERE A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.MTPL_SEQ = PB.MTPL_SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_NAME = PB.RCV_NAME
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.MTPL_SEQ
+                    , PA.ORDER_NO
+                    , PA.CPN_ORDER_NO
+                    , PA.RCV_NAME
+                    , PA.RCV_PHONE
+                    , PA.USER_ID
+                    , PA.MMS_IMG_PATH
+                    , PA.CPN_NO
+                    , PA.ORDER_SNO
+                    , PA.SEND_STATE
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.MTPL_SEQ
+                    , PB.ORDER_NO
+                    , PB.CPN_ORDER_NO
+                    , PB.RCV_NAME
+                    , PB.RCV_PHONE
+                    , PB.USER_ID
+                    , PB.MMS_IMG_PATH
+                    , PB.CPN_NO
+                    , PB.ORDER_SNO
+                    , PB.SEND_STATE
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 해피콘복수발송 마스킹 UPDATE -->
+    <update id="updateHconMultiMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_HAPPYCON_COUPON_MULTI A
+           SET A.RCV_NAME = (CASE WHEN LENGTH(A.RCV_NAME) <= 30 THEN (CASE WHEN TRIM(A.RCV_NAME) IS NOT NULL THEN SUBSTR(A.RCV_NAME,1,1) || LPAD('*', LENGTH(A.RCV_NAME) - 1,'*') ELSE '' END) ELSE A.RCV_NAME END)
+             , A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.ORDER_NO = #{orderNo}
+        ]]>
+    </update>
+
+    <!-- ===== 해피콘쿠폰이력 테이블 처리 ===== -->
+
+    <!-- 해피콘쿠폰이력 이관 테이블 MERGE -->
+    <update id="insertHconHstTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_HAPPYCON_COUPON_HST PA
+         USING (
+            SELECT A.*
+              FROM T_HAPPYCON_COUPON_HST A
+             WHERE A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.SEQ
+                    , PA.CPN_SEQ
+                    , PA.UUID
+                    , PA.USER_ID
+                    , PA.ORDER_NO
+                    , PA.ORDER_SUB_NO
+                    , PA.HC_SELL_CODE
+                    , PA.HC_SELL_NAME
+                    , PA.RCV_PHONE
+                    , PA.CPN_NO
+                    , PA.CPN_TYPE
+                    , PA.AVL_STA_DT
+                    , PA.AVL_END_DT
+                    , PA.SALE_AMT
+                    , PA.PAY_AMT
+                    , PA.CPN_STATE
+                    , PA.CPN_AMT
+                    , PA.REM_AMT
+                    , PA.USE_TYPE
+                    , PA.TRX_AMT
+                    , PA.TRX_NO
+                    , PA.ORGL_TRX_NO
+                    , PA.USE_DTM
+                    , PA.BRAND_CODE
+                    , PA.STORE_CODE
+                    , PA.STORE_NAME
+                    , PA.RFND_AMT
+                    , PA.RETRY_CNT
+                    , PA.EXTN_YN
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.SEQ
+                    , PB.CPN_SEQ
+                    , PB.UUID
+                    , PB.USER_ID
+                    , PB.ORDER_NO
+                    , PB.ORDER_SUB_NO
+                    , PB.HC_SELL_CODE
+                    , PB.HC_SELL_NAME
+                    , PB.RCV_PHONE
+                    , PB.CPN_NO
+                    , PB.CPN_TYPE
+                    , PB.AVL_STA_DT
+                    , PB.AVL_END_DT
+                    , PB.SALE_AMT
+                    , PB.PAY_AMT
+                    , PB.CPN_STATE
+                    , PB.CPN_AMT
+                    , PB.REM_AMT
+                    , PB.USE_TYPE
+                    , PB.TRX_AMT
+                    , PB.TRX_NO
+                    , PB.ORGL_TRX_NO
+                    , PB.USE_DTM
+                    , PB.BRAND_CODE
+                    , PB.STORE_CODE
+                    , PB.STORE_NAME
+                    , PB.RFND_AMT
+                    , PB.RETRY_CNT
+                    , PB.EXTN_YN
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 해피콘쿠폰이력 마스킹 UPDATE -->
+    <update id="updateHconHstMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_HAPPYCON_COUPON_HST A
+           SET A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.ORDER_NO = #{orderNo}
+        ]]>
+    </update>
+
+    <!-- ===== 해피콘반려 테이블 처리 ===== -->
+
+    <!-- 해피콘반려 이관 테이블 MERGE -->
+    <update id="insertHconRejtTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_HAPPYCON_REJ PA
+         USING (
+            SELECT A.*
+              FROM T_HAPPYCON_REJ A
+             WHERE A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.USER_PHONE = PB.USER_PHONE
+                    , PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.SEQ
+                    , PA.ORDER_NO
+                    , PA.CPN_ORDER_NO
+                    , PA.CPN_NO
+                    , PA.USER_PHONE
+                    , PA.RCV_PHONE
+                    , PA.REJ_TYPE
+                    , PA.REJ_CNFN_YN
+                    , PA.REJ_DATE
+                    , PA.RETRY_YN
+                    , PA.RETRY_DATE
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.SEQ
+                    , PB.ORDER_NO
+                    , PB.CPN_ORDER_NO
+                    , PB.CPN_NO
+                    , PB.USER_PHONE
+                    , PB.RCV_PHONE
+                    , PB.REJ_TYPE
+                    , PB.REJ_CNFN_YN
+                    , PB.REJ_DATE
+                    , PB.RETRY_YN
+                    , PB.RETRY_DATE
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , SYSDATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 해피콘반려 마스킹 UPDATE -->
+    <update id="updateHconRejtMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_HAPPYCON_REJ A
+           SET A.USER_PHONE = (CASE WHEN LENGTH(A.USER_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.USER_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.USER_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.USER_PHONE END)
+             , A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.ORDER_NO = #{orderNo}
+        ]]>
+    </update>
+
+    <!-- ===== 해피콘반려로그 테이블 처리 ===== -->
+
+    <!-- 해피콘반려로그 이관 테이블 MERGE -->
+    <update id="insertHconRejtHstTrsf" parameterType="string">
+        <![CDATA[
+         MERGE
+          INTO T_HAPPYCON_REJ_IN_LOG PA
+         USING (
+            SELECT /*+ USE_NL(A B) */
+                   B.*
+              FROM T_HAPPYCON_REJ A
+                 , T_HAPPYCON_REJ_IN_LOG B
+             WHERE A.SEQ = B.REJ_SEQ
+               AND A.ORDER_NO = #{orderNo}
+               ) PB
+            ON (PA.SEQ = PB.SEQ)
+          WHEN MATCHED THEN
+               UPDATE
+                  SET PA.RCV_PHONE = PB.RCV_PHONE
+                    , PA.UPD_DATE = PB.UPD_DATE
+          WHEN NOT MATCHED THEN
+               INSERT
+                      (
+                      PA.SEQ
+                    , PA.REJ_SEQ
+                    , PA.RCV_PHONE
+                    , PA.REG_ID
+                    , PA.REG_DATE
+                    , PA.UPD_ID
+                    , PA.UPD_DATE
+                      )
+               VALUES
+                      (
+                      PB.SEQ
+                    , PB.REJ_SEQ
+                    , PB.RCV_PHONE
+                    , PB.REG_ID
+                    , PB.REG_DATE
+                    , PB.UPD_ID
+                    , PB.UPD_DATE
+                      )
+        ]]>
+    </update>
+
+    <!-- 해피콘반려로그 마스킹 UPDATE -->
+    <update id="updateHconRejtHstMask" parameterType="string">
+        <![CDATA[
+        UPDATE T_HAPPYCON_REJ_IN_LOG A
+           SET A.RCV_PHONE = (CASE WHEN LENGTH(A.RCV_PHONE) <= 30 THEN (CASE WHEN TRIM(REPLACE(A.RCV_PHONE,'-','')) IS NOT NULL THEN RAWTOHEX(STANDARD_HASH(REPLACE(A.RCV_PHONE,'-',''),'SHA256')) ELSE ' ' END) ELSE A.RCV_PHONE END)
+         WHERE A.REJ_SEQ IN (
+            SELECT IA.SEQ
+              FROM T_HAPPYCON_REJ IA
+             WHERE IA.ORDER_NO = #{orderNo}
+               )
+        ]]>
+    </update>
+
+</mapper>

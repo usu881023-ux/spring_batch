@@ -1,0 +1,82 @@
+spring:
+  application:
+    name: hc_job_batch
+
+  config:
+    activate:
+      on-profile: local
+
+  # Spring Batch 설정
+  batch:
+    jdbc:
+      initialize-schema: always  # embedded, always, never
+      isolation-level-for-create: default
+    job:
+      enabled: false  # 애플리케이션 시작 시 자동 실행 방지
+
+  # 개발 DB 설정 (DS_PRVA)
+  datasource:
+    prva:
+      jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
+      username: HCMALL_DEV
+      password: oTDF1SVibm
+      driver-class-name: oracle.jdbc.OracleDriver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        pool-name: HikariCP-PRVA
+
+    # 개발 DB 설정 (DS_MALL)
+    mall:
+      jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
+      username: HCMALL_DEV
+      password: oTDF1SVibm
+      driver-class-name: oracle.jdbc.OracleDriver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        pool-name: HikariCP-MALL
+
+  # JPA 설정
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        highlight_sql: true
+        jdbc:
+          batch_size: 100
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+    show-sql: false
+
+# Logging 설정
+logging:
+  level:
+    root: INFO
+    com.secta.hcbatch: DEBUG
+    org.springframework.batch: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/hc-batch.log
+    max-size: 10MB
+    max-history: 30
+
+# Batch 커스텀 설정
+batch:
+  chunk-size: 1000
+  pool-size: 5
+  queue-capacity: 10
+  commit-interval: 100

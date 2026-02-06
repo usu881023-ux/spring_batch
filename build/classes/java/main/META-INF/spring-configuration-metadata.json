@@ -1,0 +1,21 @@
+{
+  "groups": [
+    {
+      "name": "spring.datasource.mall",
+      "type": "javax.sql.DataSource",
+      "sourceType": "com.secta.hcbatch.config.DataSourceConfig",
+      "sourceMethod": "mallDataSource()"
+    },
+    {
+      "name": "spring.datasource.prva",
+      "type": "javax.sql.DataSource",
+      "sourceType": "com.secta.hcbatch.config.DataSourceConfig",
+      "sourceMethod": "prvaDataSource()"
+    }
+  ],
+  "properties": [],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}
