@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secta.hcbatch.job.message.mapper.HcMsgMapper">
+
+    <resultMap id="msgListResult" type="com.secta.hcbatch.common.dto.MmsTriggerDto">
+        <result property="taskDtm" column="TASK_DTM"/>
+        <result property="taskNo" column="TASK_NO"/>
+        <result property="orderNo" column="ORDER_NO"/>
+        <result property="sendPhone" column="SEND_PHONE"/>
+        <result property="rcvPhone" column="RCV_PHONE"/>
+        <result property="mmsSubj" column="MMS_SUBJ"/>
+        <result property="mmsCtt" column="MMS_CTT"/>
+        <result property="mmsImgFile" column="MMS_IMG_FILE"/>
+        <result property="mmsAtFile" column="MMS_AT_FILE"/>
+    </resultMap>
+
+    <resultMap id="orderInfoResult" type="com.secta.hcbatch.common.dto.OrderInfoDto">
+        <result property="cartNo" column="CART_NO"/>
+        <result property="userId" column="USER_ID"/>
+    </resultMap>
+
+    <!-- MMS 발송 트리거 목록 조회 -->
+    <select id="selectMsgTrigList" resultMap="msgListResult" timeout="30">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.selectMsgTrigList */
+        SELECT TO_CHAR(A.TRIG_DATE, 'YYYYMMDDHH24MISSFF9') AS TASK_DTM
+             , TO_CHAR(A.TRIG_SEQ)                         AS TASK_NO
+             , A.ORDER_NO
+             , REPLACE(A.SEND_PHONE, '-', '')              AS SEND_PHONE
+             , REPLACE(A.RCV_PHONE, '-', '')               AS RCV_PHONE
+             , A.MMS_SUBJ
+             , A.MMS_CTT
+             , A.MMS_IMG_FILE
+             , A.MMS_AT_FILE
+        FROM T_HAPPYCON_MMS A
+        WHERE 1 = 1
+          AND A.TRIG_DATE <![CDATA[>=]]> TO_TIMESTAMP(
+                TO_CHAR(TO_TIMESTAMP(#{taskDtm}, 'YYYYMMDDHH24MISSFF9') - 3 / 60 / 60 / 24, 'YYYYMMDDHH24MISS') ||
+                '.000000000', 'YYYYMMDDHH24MISS.FF9')
+          AND A.TRIG_DATE <![CDATA[<=]]>
+              TO_TIMESTAMP(TO_CHAR(SYSDATE - 0 / 24 / 3600, 'YYYYMMDDHH24MISS') || '.000000000', 'YYYYMMDDHH24MISS.FF9')
+          AND A.TRIG_SEQ <![CDATA[<>]]> TO_NUMBER(#{taskNo})
+          AND A.SEND_DTM IS NULL
+          AND TRIM(A.MMS_AT_FILE) IS NULL
+        ORDER BY A.TRIG_DATE
+    </select>
+
+    <!-- MMS 시퀀스 조회 -->
+    <select id="selectMsgSeq" resultType="String">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.selectMsgSeq */
+        SELECT TO_CHAR(EM_TRAN_MMS_SEQ.NEXTVAL) AS MMS_SEQ
+        FROM DUAL
+    </select>
+
+    <!-- 주문 정보 조회 -->
+    <select id="selectOrderInfo" resultMap="orderInfoResult" timeout="10">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.selectOrderInfo */
+        SELECT A.CART_NO
+             , A.USER_ID
+        FROM T_ORDER A
+        WHERE A.ORDER_NO = #{orderNo}
+    </select>
+
+    <!-- MMS 발송 트리거 상태 업데이트 -->
+    <update id="updateMsgTrigInfo">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.updateMsgTrigInfo */
+        UPDATE T_HAPPYCON_MMS A
+        SET A.SEND_DTM = SYSDATE
+        WHERE A.TRIG_DATE = TO_TIMESTAMP(#{taskDtm}, 'YYYYMMDDHH24MISSFF9')
+          AND A.TRIG_SEQ = TO_NUMBER(#{taskNo})
+    </update>
+
+    <!-- MMS 발송 오류 업데이트 -->
+    <update id="updateMsgErrorInfo">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.updateMsgErrorInfo */
+        UPDATE T_HAPPYCON_MMS A
+        SET A.MMS_AT_FILE = #{errMsg}
+        WHERE A.TRIG_DATE = TO_TIMESTAMP(#{taskDtm}, 'YYYYMMDDHH24MISSFF9')
+          AND A.TRIG_SEQ = TO_NUMBER(#{taskNo})
+    </update>
+
+    <!-- MMS 발송 메시지 등록 -->
+    <insert id="insertSendMsg" parameterType="com.secta.hcbatch.common.dto.MmsSendDto">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.insertSendMsg */
+        INSERT INTO EM_TRAN
+        ( TRAN_PR
+        , TRAN_PHONE
+        , TRAN_CALLBACK
+        , TRAN_STATUS
+        , TRAN_DATE
+        , TRAN_MSG
+        , TRAN_TYPE
+        , TRAN_ETC1
+        , TRAN_ETC4)
+        VALUES ( EM_TRAN_PR.NEXTVAL
+               , #{rcvPhone}
+               , #{sendPhone}
+               , '1'
+               , SYSDATE
+               , ' '
+               , TO_NUMBER(#{sendType})
+               , #{orderNo}
+               , TO_NUMBER(#{mmsSeq}))
+    </insert>
+
+    <!-- MMS 이미지 등록 -->
+    <insert id="insertSendImage" parameterType="com.secta.hcbatch.common.dto.MmsSendDto">
+        /** com.secta.hcbatch.job.message.mapper.HcMsgMapper.insertSendImage */
+        INSERT INTO EM_TRAN_MMS
+        ( MMS_SEQ
+        , FILE_CNT
+        , MMS_BODY
+        , MMS_SUBJECT
+        , FILE_TYPE1
+        , FILE_NAME1
+        , SERVICE_DEP1)
+        VALUES ( TO_NUMBER(#{mmsSeq})
+               , TO_NUMBER(#{imgCnt})
+               , #{mmsCtt}
+               , #{mmsSubj}
+               , #{mmsType}
+               , #{mmsImg}
+               , 'ALL')
+    </insert>
+</mapper>

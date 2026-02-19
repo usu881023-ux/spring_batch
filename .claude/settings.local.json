@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.gradlew.bat compileJava)",
+      "Bash(gradlew.bat compileJava:*)",
+      "Bash(cmd.exe /c \"cd /d D:\\\\IntelliJProject\\\\hc_job_batch && gradlew.bat compileJava\")",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe -Command \"Set-Location ''D:\\\\IntelliJProject\\\\hc_job_batch''; .\\\\gradlew.bat compileJava 2>&1\")",
+      "Bash(powershell.exe -Command \"Set-Location ''D:\\\\IntelliJProject\\\\hc_job_batch''; & ''.\\\\gradlew.bat'' compileJava 2>&1\")",
+      "Bash(del:*)",
+      "Bash(del \"D:\\\\IntelliJProject\\\\hc_job_batch\\\\src\\\\main\\\\java\\\\com\\\\secta\\\\hcbatch\\\\mapper\\\\HcMsgMapper.java\")",
+      "Bash(del \"D:\\\\IntelliJProject\\\\hc_job_batch\\\\src\\\\main\\\\java\\\\com\\\\secta\\\\hcbatch\\\\common\\\\util\\\\AwsS3Util.java\")",
+      "Bash(del \"D:\\\\IntelliJProject\\\\hc_job_batch\\\\src\\\\main\\\\java\\\\com\\\\secta\\\\hcbatch\\\\common\\\\util\\\\HttpUtil.java\")",
+      "Bash(./gradlew compileJava:*)",
+      "Bash(.\\\\gradlew compileJava:*)"
+    ]
+  }
+}

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secta.hcbatch.job.hcon.mapper.HcTaskMapper">
+
+    <resultMap id="vchrInfoResult" type="com.secta.hcbatch.common.dto.VoucherInfoDto">
+        <result property="vchrNo" column="CPN_NO"/>
+        <result property="cpnType" column="CPN_TYPE"/>
+        <result property="cpnState" column="CPN_STATE"/>
+        <result property="hcSellCode" column="HC_SELL_CODE"/>
+        <result property="avlEndDt" column="AVL_END_DT"/>
+        <result property="remAmt" column="REM_AMT"/>
+    </resultMap>
+
+    <!-- 상품권 정보 조회 -->
+    <select id="selectVchrInfo" resultMap="vchrInfoResult" timeout="5">
+        /** com.secta.hcbatch.job.hcon.mapper.HcTaskMapper.selectVchrChgHst */
+        SELECT /*+ INDEX(A T_HAPPYCON_COUPON_IDX2) */
+            A.CPN_NO
+             , A.CPN_TYPE
+             , A.CPN_STATE
+             , A.HC_SELL_CODE
+             , A.AVL_END_DT
+             , TO_CHAR(A.REM_AMT) AS REM_AMT
+        FROM T_HAPPYCON_COUPON A
+        WHERE A.CPN_NO = #{vchrNo}
+    </select>
+
+    <!-- 상품권 정보 업데이트 -->
+    <update id="updateVchrInfo" parameterType="com.secta.hcbatch.common.dto.VoucherUpdateDto">
+        /** com.secta.hcbatch.job.hcon.mapper.HcTaskMapper.updateVchrInfo */
+        UPDATE /*+ INDEX(A T_HAPPYCON_COUPON_IDX2) */
+        T_HAPPYCON_COUPON A
+        SET A.UPD_ID = 'batch'
+        , A.UPD_DATE = (CASE WHEN ('' || #{cpnState}) IS NOT NULL OR ('' || #{avlEndDt}) IS NOT NULL OR ('' ||
+        #{remAmt}) IS NOT NULL THEN SYSDATE ELSE A.UPD_DATE END)
+        <if test='cpnState != null and cpnState != ""'>
+            , A.CPN_STATE = #{cpnState}
+        </if>
+        <if test='avlEndDt != null and avlEndDt != ""'>
+            , A.AVL_END_DT = #{avlEndDt}
+        </if>
+        <if test='remAmt != null and remAmt != ""'>
+            , A.REM_AMT = TO_NUMBER(#{remAmt})
+        </if>
+        , A.USE_TYPE = #{useType}
+        , A.TRX_AMT = #{trxAmt}
+        , A.USE_DTM = #{useDtm}
+        , A.BRAND_CODE = #{brndCd}
+        , A.STORE_CODE = #{stoCd}
+        , A.STORE_NAME = #{stoNm}
+        WHERE A.CPN_NO = #{vchrNo}
+    </update>
+
+    <!-- 상품권 변경 이력 등록 -->
+    <insert id="insertVchrChgHst">
+        /** com.secta.hcbatch.job.hcon.mapper.HcTaskMapper.insertVchrChgHst */
+        INSERT INTO H_HAPPYCON_COUPON_HST
+        ( CPN_SEQ
+        , UUID
+        , USER_ID
+        , ORDER_NO
+        , ORDER_SUB_NO
+        , HC_SELL_CODE
+        , HC_SELL_NAME
+        , RCV_PHONE
+        , CPN_NO
+        , CPN_TYPE
+        , AVL_STA_DT
+        , AVL_END_DT
+        , SALE_AMT
+        , PAY_AMT
+        , CPN_STATE
+        , CPN_AMT
+        , REM_AMT
+        , USE_TYPE
+        , TRX_AMT
+        , TRX_NO
+        , ORGL_TRX_NO
+        , USE_DTM
+        , BRAND_CODE
+        , STORE_CODE
+        , STORE_NAME
+        , RFND_AMT
+        , RETRY_CNT
+        , EXTN_YN
+        , REG_ID
+        , REG_DATE)
+        SELECT /*+ INDEX(A T_HAPPYCON_COUPON_IDX2) */
+            A.CPN_SEQ
+             , A.UUID
+             , A.USER_ID
+             , A.ORDER_NO
+             , A.ORDER_SUB_NO
+             , A.HC_SELL_CODE
+             , A.HC_SELL_NAME
+             , A.RCV_PHONE
+             , A.CPN_NO
+             , A.CPN_TYPE
+             , A.AVL_STA_DT
+             , A.AVL_END_DT
+             , A.SALE_AMT
+             , A.PAY_AMT
+             , A.CPN_STATE
+             , A.CPN_AMT
+             , A.REM_AMT
+             , A.USE_TYPE
+             , A.TRX_AMT
+             , A.TRX_NO
+             , A.ORGL_TRX_NO
+             , A.USE_DTM
+             , A.BRAND_CODE
+             , A.STORE_CODE
+             , A.STORE_NAME
+             , A.RFND_AMT
+             , A.RETRY_CNT
+             , A.EXTN_YN
+             , A.UPD_ID
+             , SYSTIMESTAMP
+        FROM T_HAPPYCON_COUPON A
+        WHERE A.CPN_NO = #{vchrNo}
+    </insert>
+
+</mapper>

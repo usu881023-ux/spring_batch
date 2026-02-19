@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secta.hcbatch.job.hcon.mapper.HconTaskMapper">
+
+    <resultMap id="vchrChgHstResult" type="com.secta.hcbatch.common.dto.VoucherChangeHistDto">
+        <result property="taskDtm" column="TASK_DTM"/>
+        <result property="chgSno" column="CHG_SNO"/>
+        <result property="vchrNo" column="VCHR_NO"/>
+        <result property="imgnVchrNo" column="IMGN_VCHR_NO"/>
+        <result property="chgClCd" column="CHG_CL_CD"/>
+        <result property="brndCd" column="BRND_CD"/>
+        <result property="stoCd" column="STO_CD"/>
+        <result property="stoNm" column="STO_NM"/>
+        <result property="trxAmt" column="TRX_AMT"/>
+        <result property="remAmt" column="REM_AMT"/>
+        <result property="avlEndDtm" column="AVL_END_DTM"/>
+    </resultMap>
+
+    <!-- 상품권 변경 이력 조회 -->
+    <select id="selectVchrChgHst" resultMap="vchrChgHstResult" fetchSize="1000" timeout="30">
+        /** com.secta.hcbatch.job.hcon.mapper.HconTaskMapper.selectVchrChgHst */
+        SELECT TO_CHAR(A.REG_DATE, 'YYYYMMDDHH24MISSFF9')                         AS TASK_DTM
+             , TO_CHAR(A.CPN_HIST_SEQ)                                            AS CHG_SNO
+             , A.CPN_NO                                                           AS VCHR_NO
+             , A.VIRTUAL_CPN_NO                                                   AS IMGN_VCHR_NO
+             , A.PROCESS_TYPE                                                     AS CHG_CL_CD
+             , NVL(A.POS_BRAND_CODE, ' ')                                         AS BRND_CD
+             , NVL(A.MEMBER_STORE_CODE, ' ')                                      AS STO_CD
+             , NVL(A.MEMBER_STORE_NAME, ' ')                                      AS STO_NM
+             , TO_CHAR(A.CONFIRM_AMT)                                             AS TRX_AMT
+             , TO_CHAR(A.BALANCE)                                                 AS REM_AMT
+             , NVL(TO_CHAR(A.AFTER_VALID_TERM_END_DATE, 'YYYYMMDDHH24MISS'), ' ') AS AVL_END_DTM
+        FROM CPN_HIST A
+        WHERE 1 = 1
+          AND A.REG_DATE <![CDATA[>=]]> TO_TIMESTAMP(#{taskDtm}, 'YYYYMMDDHH24MISSFF9')
+          AND A.REG_DATE <![CDATA[<=]]>
+              TO_TIMESTAMP(TO_CHAR(SYSDATE - 0 / 24 / 3600, 'YYYYMMDDHH24MISS') || '.000000000', 'YYYYMMDDHH24MISS.FF9')
+          AND A.CPN_HIST_SEQ <![CDATA[<>]]> TO_NUMBER(#{chgSno})
+          AND A.PROCESS_TYPE IN (
+                                 'AD',
+                                 'AC',
+                                 'MAD',
+                                 'MAC',
+                                 'ADNC',
+                                 'ACNC',
+                                 'RR',
+                                 'CRR',
+                                 'C',
+                                 'CC',
+                                 'CCI',
+                                 'CCCI',
+                                 'VCCI',
+                                 'CVCCI',
+                                 'PC',
+                                 'RC',
+                                 'SC',
+                                 'SCRC',
+                                 'CTI',
+                                 'VC',
+                                 'CVC'
+            )
+        ORDER BY A.REG_DATE
+    </select>
+
+</mapper>
