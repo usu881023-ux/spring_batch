@@ -107,7 +107,7 @@ batch:
 # AWS S3 설정
 aws:
   s3:
-    access-key: AKIA3X5G6LP23ZGC36E4
-    secret-key: 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
+    access-key: {access-key}
+    secret-key: {secret-key}
     bucket-name: happy-objects
     region: ap-northeast-2
