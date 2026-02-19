@@ -18,8 +18,8 @@ spring:
   datasource:
     prva:
       jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
-      username: HCMALL_DEV
-      password: oTDF1SVibm
+      username: ${DB_PRVA_USERNAME}
+      password: ${DB_PRVA_PASSWORD}
       driver-class-name: oracle.jdbc.OracleDriver
       hikari:
         maximum-pool-size: 10
@@ -32,8 +32,8 @@ spring:
     # 개발 DB 설정 (DS_MALL)
     mall:
       jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
-      username: HCMALL_DEV
-      password: oTDF1SVibm
+      username: ${DB_MALL_USERNAME}
+      password: ${DB_MALL_PASSWORD}
       driver-class-name: oracle.jdbc.OracleDriver
       hikari:
         maximum-pool-size: 10
@@ -46,8 +46,8 @@ spring:
     # 해피콘 DB 설정 (DS_HCON)
     hcon:
       jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
-      username: HCMALL_DEV
-      password: oTDF1SVibm
+      username: ${DB_HCON_USERNAME}
+      password: ${DB_HCON_PASSWORD}
       driver-class-name: oracle.jdbc.OracleDriver
       hikari:
         maximum-pool-size: 5
@@ -107,7 +107,7 @@ batch:
 # AWS S3 설정
 aws:
   s3:
-    access-key: {access-key}
-    secret-key: {secret-key}
+    access-key: ${ACCESS_KEY}
+    secret-key: ${SECRET_KEY}
     bucket-name: happy-objects
     region: ap-northeast-2
