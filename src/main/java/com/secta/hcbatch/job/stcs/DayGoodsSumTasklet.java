@@ -2,7 +2,8 @@ package com.secta.hcbatch.job.stcs;
 
 import com.secta.hcbatch.common.constant.BatchJobParameter;
 import com.secta.hcbatch.common.util.DateUtil;
-import com.secta.hcbatch.mapper.DayGoodsSumMapper;
+import com.secta.hcbatch.job.stcs.mapper.DayGoodsSumMapper;
+import com.secta.hcbatch.job.stcs.service.DayGoodsSumService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.SqlSession;
 import org.springframework.batch.core.step.StepContribution;
@@ -26,9 +27,12 @@ import java.util.Map;
 public class DayGoodsSumTasklet implements Tasklet {
 
     private final SqlSession mallSqlSession;
+    private final DayGoodsSumService dayGoodsSumService;
 
-    public DayGoodsSumTasklet(@Qualifier("mallSqlSessionTemplate") SqlSession mallSqlSession) {
+    public DayGoodsSumTasklet(@Qualifier("mallSqlSessionTemplate") SqlSession mallSqlSession,
+                              DayGoodsSumService dayGoodsSumService) {
         this.mallSqlSession = mallSqlSession;
+        this.dayGoodsSumService = dayGoodsSumService;
     }
 
     @Override
@@ -44,15 +48,13 @@ public class DayGoodsSumTasklet implements Tasklet {
         log.info("기준일자: {}", baseDt);
         log.info("=================================================================");
 
+        // 2. Mapper 획득
         DayGoodsSumMapper mapper = mallSqlSession.getMapper(DayGoodsSumMapper.class);
 
-        // 2. 기존 데이터 삭제
-        int deletedCount = mapper.deleteDayGoodsSum(baseDt);
-        log.info("기존 데이터 삭제 완료 - 삭제 건수: {}", deletedCount);
-
-        // 3. 상품별 판매 집계 데이터 INSERT
-        int insertedCount = mapper.insertDayGoodsSum(baseDt);
-        log.info("집계 데이터 INSERT 완료 - 처리 건수: {}", insertedCount);
+        // 3. Service 호출 - 비즈니스 로직 위임
+        int[] result = dayGoodsSumService.aggregate(mapper, baseDt);
+        int deletedCount = result[0];
+        int insertedCount = result[1];
 
         // 4. 처리 결과 기록
         contribution.incrementWriteCount(insertedCount);

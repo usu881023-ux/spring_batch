@@ -42,6 +42,19 @@ dependencies {
     implementation 'org.mybatis:mybatis:3.5.16'
     implementation 'org.mybatis:mybatis-spring:3.0.4'
 
+    // JSON
+    implementation 'com.googlecode.json-simple:json-simple:1.1.1'
+
+    // Apache Commons
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+
+    // 외부 JAR - 암복호화 라이브러리
+    implementation files('lib/bcipher-1.0.5.jar')
+
+    // AWS SDK v2 (S3)
+    implementation platform('software.amazon.awssdk:bom:2.25.0')
+    implementation 'software.amazon.awssdk:s3'
+
     // Database - Oracle
     implementation "com.oracle.database.jdbc:ojdbc11:${oracleVersion}"
     implementation "com.oracle.database.jdbc:ucp:${oracleVersion}"
@@ -77,18 +90,23 @@ tasks.named('test') {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs += [
-        '-parameters',
-        '--enable-preview'  // Java 25 preview features
+            '-parameters',
+            '--enable-preview'  // Java 25 preview features
     ]
 }
+
+// 네이티브 라이브러리 경로 (bcipher DLL/SO)
+def nativeLibPath = file("${projectDir}/lib").absolutePath
 
 // Java 실행 옵션 (Java 25 preview features)
 tasks.withType(JavaExec).configureEach {
     jvmArgs += ['--enable-preview']
+    systemProperty 'bcipher.library.path', nativeLibPath
 }
 
 tasks.withType(Test).configureEach {
     jvmArgs += ['--enable-preview']
+    systemProperty 'bcipher.library.path', nativeLibPath
 }
 
 // QueryDSL 설정

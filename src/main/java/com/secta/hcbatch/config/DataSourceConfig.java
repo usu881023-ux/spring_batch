@@ -14,8 +14,9 @@ import javax.sql.DataSource;
 
 /**
  * 다중 데이터소스 설정
- * - DS_PRVA: 개인정보 처리용 DB
- * - DS_MALL: 쇼핑몰 DB
+ * - prvaDataSource: 선물하기 개인정보 처리용 DB 스키마(HCMALL_PRVA)
+ * - mallDataSource: 선물하기 쇼핑몰 DB 스키마(HCMALL_DEV)
+ * - hconDataSource: 해피콘 DB(HCON_DEV)
  */
 @Slf4j
 @Configuration
@@ -47,6 +48,18 @@ public class DataSourceConfig {
     }
 
     /**
+     * HCON 데이터소스 (해피콘 DB)
+     */
+    @Bean(name = "hconDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.hcon")
+    public DataSource hconDataSource() {
+        log.info("Initializing HCON DataSource");
+        return DataSourceBuilder.create()
+                .type(HikariDataSource.class)
+                .build();
+    }
+
+    /**
      * PRVA JdbcTemplate
      */
     @Primary
@@ -60,6 +73,14 @@ public class DataSourceConfig {
      */
     @Bean(name = "mallJdbcTemplate")
     public JdbcTemplate mallJdbcTemplate(@Qualifier("mallDataSource") DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
+    }
+
+    /**
+     * HCON JdbcTemplate
+     */
+    @Bean(name = "hconJdbcTemplate")
+    public JdbcTemplate hconJdbcTemplate(@Qualifier("hconDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
 }

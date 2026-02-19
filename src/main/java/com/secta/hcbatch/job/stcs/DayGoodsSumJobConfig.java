@@ -30,6 +30,7 @@ public class DayGoodsSumJobConfig {
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
     private final DayGoodsSumTasklet dayGoodsSumTasklet;
+    private final DayGoodsSumListener dayGoodsSumListener;
 
     /**
      * dayGoodsSumJob 정의
@@ -39,6 +40,7 @@ public class DayGoodsSumJobConfig {
         log.info("Initializing dayGoodsSumJob");
         
         return new JobBuilder("dayGoodsSumJob", jobRepository)
+                .listener(dayGoodsSumListener)
                 .start(dayGoodsSumStep())
                 .build();
     }

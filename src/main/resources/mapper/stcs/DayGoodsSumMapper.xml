@@ -1,160 +1,155 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.secta.hcbatch.mapper.DayGoodsSumMapper">
+<mapper namespace="com.secta.hcbatch.job.stcs.mapper.DayGoodsSumMapper">
 
     <!-- 기준일자 데이터 삭제 -->
     <delete id="deleteDayGoodsSum" parameterType="string">
-        DELETE FROM S_DAY_GOODS_SALE_SUM
-         WHERE ORDER_DT = #{baseDt}
+        /** com.secta.hcbatch.job.stcs.mapper.DayGoodsSumMapper.deleteDayGoodsSum */
+        DELETE
+        FROM S_DAY_GOODS_SALE_SUM
+        WHERE ORDER_DT = #{baseDt}
     </delete>
 
     <!-- 상품별 판매현황 집계 INSERT -->
     <insert id="insertDayGoodsSum" parameterType="string">
-        INSERT INTO S_DAY_GOODS_SALE_SUM (
-            ORDER_DT,
-            GOODS_CODE,
-            GIFT_TYPE,
-            BRAND_CODE,
-            ORDER_CNT,
-            ORDER_AMT,
-            ORDER_CNCL_CNT,
-            ORDER_CNCL_AMT,
-            REG_DATE,
-            UPD_DATE
-        )
+        /** com.secta.hcbatch.job.stcs.mapper.DayGoodsSumMapper.insertDayGoodsSum */
+        INSERT INTO S_DAY_GOODS_SALE_SUM (ORDER_DT,
+                                          GOODS_CODE,
+                                          GIFT_TYPE,
+                                          BRAND_CODE,
+                                          ORDER_CNT,
+                                          ORDER_AMT,
+                                          ORDER_CNCL_CNT,
+                                          ORDER_CNCL_AMT,
+                                          REG_DATE,
+                                          UPD_DATE)
         SELECT PA.ORDER_DT
              , PA.GOODS_CODE
              , PA.GIFT_TYPE
              , PA.BRAND_CODE
-             , SUM(PA.ORDER_CNT) AS ORDER_CNT
-             , SUM(PA.ORDER_AMT) AS ORDER_AMT
+             , SUM(PA.ORDER_CNT)      AS ORDER_CNT
+             , SUM(PA.ORDER_AMT)      AS ORDER_AMT
              , SUM(PA.ORDER_CNCL_CNT) AS ORDER_CNCL_CNT
              , SUM(PA.ORDER_CNCL_AMT) AS ORDER_CNCL_AMT
-             , SYSDATE AS REG_DATE
-             , SYSDATE AS UPD_DATE
-          FROM (
-                SELECT /*+ USE_NL(A B C) INDEX(A T_ORDER_IDX4) INDEX(C T_GOODS_PK) */
-                       TO_CHAR(A.ORDER_DATE,'YYYYMMDD') AS ORDER_DT
-                     , B.GOODS_CODE AS GOODS_CODE
-                     , B.BRAND_CODE AS BRAND_CODE
-                     , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
-                     , SUM(B.ORDER_QTY) AS ORDER_CNT
-                     , SUM(B.ORDER_AMT) AS ORDER_AMT
-                     , 0 AS ORDER_CNCL_CNT
-                     , 0 AS ORDER_CNCL_AMT
-                  FROM T_ORDER A
-                     , T_ORDER_INFO B
-                     , T_GOODS C
-                 WHERE A.ORDER_CODE = B.ORDER_CODE
-                   AND A.ORDER_NO = B.ORDER_NO
-                   AND B.GOODS_CODE = C.GOODS_CODE
-                   AND A.ORDER_DATE &gt;= TO_DATE(#{baseDt},'YYYYMMDD')
-                   AND A.ORDER_DATE &lt; TO_DATE(#{baseDt},'YYYYMMDD') + 1
-                   AND A.ORDER_STATE &lt;&gt; '00'
-                   AND (A.MTPL_SEND_YN IS NULL OR C.GOODS_TYPE NOT IN ('0','6','7'))
-                 GROUP BY TO_CHAR(A.ORDER_DATE,'YYYYMMDD')
+             , SYSDATE                AS REG_DATE
+             , SYSDATE                AS UPD_DATE
+        FROM (SELECT /*+ USE_NL(A B C) INDEX(A T_ORDER_IDX4) INDEX(C T_GOODS_PK) */
+                  TO_CHAR(A.ORDER_DATE, 'YYYYMMDD')                               AS ORDER_DT
+                   , B.GOODS_CODE                                                 AS GOODS_CODE
+                   , B.BRAND_CODE                                                 AS BRAND_CODE
+                   , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
+                   , SUM(B.ORDER_QTY)                                             AS ORDER_CNT
+                   , SUM(B.ORDER_AMT)                                             AS ORDER_AMT
+                   , 0                                                            AS ORDER_CNCL_CNT
+                   , 0                                                            AS ORDER_CNCL_AMT
+              FROM T_ORDER A
+                 , T_ORDER_INFO B
+                 , T_GOODS C
+              WHERE A.ORDER_CODE = B.ORDER_CODE
+                AND A.ORDER_NO = B.ORDER_NO
+                AND B.GOODS_CODE = C.GOODS_CODE
+                AND A.ORDER_DATE &gt;= TO_DATE(#{baseDt}, 'YYYYMMDD')
+                AND A.ORDER_DATE &lt; TO_DATE(#{baseDt}, 'YYYYMMDD') + 1
+                AND A.ORDER_STATE &lt;&gt; '00'
+                AND (A.MTPL_SEND_YN IS NULL OR C.GOODS_TYPE NOT IN ('0', '6', '7'))
+              GROUP BY TO_CHAR(A.ORDER_DATE, 'YYYYMMDD')
                      , B.GOODS_CODE
                      , B.BRAND_CODE
                      , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END)
 
-                 UNION ALL
+              UNION ALL
 
-                SELECT /*+ USE_NL(A B C D) INDEX(A T_ORDER_IDX4) INDEX(C T_GOODS_PK) */
-                       TO_CHAR(A.ORDER_DATE,'YYYYMMDD') AS ORDER_DT
-                     , B.GOODS_CODE AS GOODS_CODE
-                     , B.BRAND_CODE AS BRAND_CODE
-                     , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
-                     , COUNT(*) AS ORDER_CNT
-                     , SUM(B.ORDER_AMT / B.ORDER_QTY) AS ORDER_AMT
-                     , 0 AS ORDER_CNCL_CNT
-                     , 0 AS ORDER_CNCL_AMT
-                  FROM T_ORDER A
-                     , T_ORDER_INFO B
-                     , T_GOODS C
-                     , T_HAPPYCON_COUPON_MULTI D
-                 WHERE A.ORDER_CODE = B.ORDER_CODE
-                   AND A.ORDER_NO = B.ORDER_NO
-                   AND B.GOODS_CODE = C.GOODS_CODE
-                   AND A.ORDER_NO = D.ORDER_NO
-                   AND A.ORDER_DATE &gt;= TO_DATE(#{baseDt},'YYYYMMDD')
-                   AND A.ORDER_DATE &lt; TO_DATE(#{baseDt},'YYYYMMDD') + 1
-                   AND A.ORDER_STATE &lt;&gt; '00'
-                   AND A.MTPL_SEND_YN = '1'
-                   AND C.GOODS_TYPE IN ('0','6','7')
-                 GROUP BY TO_CHAR(A.ORDER_DATE,'YYYYMMDD')
+              SELECT /*+ USE_NL(A B C D) INDEX(A T_ORDER_IDX4) INDEX(C T_GOODS_PK) */
+                  TO_CHAR(A.ORDER_DATE, 'YYYYMMDD')                               AS ORDER_DT
+                   , B.GOODS_CODE                                                 AS GOODS_CODE
+                   , B.BRAND_CODE                                                 AS BRAND_CODE
+                   , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
+                   , COUNT(*)                                                     AS ORDER_CNT
+                   , SUM(B.ORDER_AMT / B.ORDER_QTY)                               AS ORDER_AMT
+                   , 0                                                            AS ORDER_CNCL_CNT
+                   , 0                                                            AS ORDER_CNCL_AMT
+              FROM T_ORDER A
+                 , T_ORDER_INFO B
+                 , T_GOODS C
+                 , T_HAPPYCON_COUPON_MULTI D
+              WHERE A.ORDER_CODE = B.ORDER_CODE
+                AND A.ORDER_NO = B.ORDER_NO
+                AND B.GOODS_CODE = C.GOODS_CODE
+                AND A.ORDER_NO = D.ORDER_NO
+                AND A.ORDER_DATE &gt;= TO_DATE(#{baseDt}, 'YYYYMMDD')
+                AND A.ORDER_DATE &lt; TO_DATE(#{baseDt}, 'YYYYMMDD') + 1
+                AND A.ORDER_STATE &lt;&gt; '00'
+                AND A.MTPL_SEND_YN = '1'
+                AND C.GOODS_TYPE IN ('0', '6', '7')
+              GROUP BY TO_CHAR(A.ORDER_DATE, 'YYYYMMDD')
                      , B.GOODS_CODE
                      , B.BRAND_CODE
                      , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END)
 
-                 UNION ALL
+              UNION ALL
 
-                SELECT /*+ USE_NL(M A B C) INDEX(A T_ORDER_IDX1) INDEX(C T_GOODS_PK) */
-                       M.ORDER_DT
-                     , B.GOODS_CODE AS GOODS_CODE
-                     , B.BRAND_CODE AS BRAND_CODE
-                     , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
-                     , 0 AS ORDER_CNT
-                     , 0 AS ORDER_AMT
-                     , SUM(B.ORDER_QTY) AS ORDER_CNCL_CNT
-                     , SUM(B.ORDER_AMT) AS ORDER_CNCL_AMT
-                  FROM (
-                        SELECT DISTINCT TO_CHAR(CNCL_DATE,'YYYYMMDD') AS ORDER_DT
-                             , ORDER_NO
-                          FROM T_ORDER_CANCEL
-                         WHERE CNCL_DATE &gt;= TO_DATE(#{baseDt},'YYYYMMDD')
-                           AND CNCL_DATE &lt; TO_DATE(#{baseDt},'YYYYMMDD') + 1
-                       ) M
-                     , T_ORDER A
-                     , T_ORDER_INFO B
-                     , T_GOODS C
-                 WHERE M.ORDER_NO = A.ORDER_NO
-                   AND A.ORDER_CODE = B.ORDER_CODE
-                   AND A.ORDER_NO = B.ORDER_NO
-                   AND B.GOODS_CODE = C.GOODS_CODE
-                   AND (A.MTPL_SEND_YN IS NULL OR C.GOODS_TYPE NOT IN ('0','6','7'))
-                 GROUP BY M.ORDER_DT
+              SELECT /*+ USE_NL(M A B C) INDEX(A T_ORDER_IDX1) INDEX(C T_GOODS_PK) */
+                  M.ORDER_DT
+                   , B.GOODS_CODE                                                 AS GOODS_CODE
+                   , B.BRAND_CODE                                                 AS BRAND_CODE
+                   , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
+                   , 0                                                            AS ORDER_CNT
+                   , 0                                                            AS ORDER_AMT
+                   , SUM(B.ORDER_QTY)                                             AS ORDER_CNCL_CNT
+                   , SUM(B.ORDER_AMT)                                             AS ORDER_CNCL_AMT
+              FROM (SELECT DISTINCT TO_CHAR(CNCL_DATE, 'YYYYMMDD') AS ORDER_DT
+                                  , ORDER_NO
+                    FROM T_ORDER_CANCEL
+                    WHERE CNCL_DATE &gt;= TO_DATE(#{baseDt}, 'YYYYMMDD')
+                      AND CNCL_DATE &lt; TO_DATE(#{baseDt}, 'YYYYMMDD') + 1) M
+                 , T_ORDER A
+                 , T_ORDER_INFO B
+                 , T_GOODS C
+              WHERE M.ORDER_NO = A.ORDER_NO
+                AND A.ORDER_CODE = B.ORDER_CODE
+                AND A.ORDER_NO = B.ORDER_NO
+                AND B.GOODS_CODE = C.GOODS_CODE
+                AND (A.MTPL_SEND_YN IS NULL OR C.GOODS_TYPE NOT IN ('0', '6', '7'))
+              GROUP BY M.ORDER_DT
                      , B.GOODS_CODE
                      , B.BRAND_CODE
                      , (CASE WHEN A.USER_PHONE = A.RCV_PHONE THEN 'M' ELSE 'G' END)
 
-                 UNION ALL
+              UNION ALL
 
-                SELECT /*+ USE_NL(M A B C D) INDEX(A T_ORDER_IDX1) INDEX(C T_GOODS_PK) */
-                       M.ORDER_DT
-                     , B.GOODS_CODE AS GOODS_CODE
-                     , B.BRAND_CODE AS BRAND_CODE
-                     , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
-                     , 0 AS ORDER_CNT
-                     , 0 AS ORDER_AMT
-                     , COUNT(*) AS ORDER_CNCL_CNT
-                     , SUM(B.ORDER_AMT / B.ORDER_QTY) AS ORDER_CNCL_AMT
-                  FROM (
-                        SELECT DISTINCT TO_CHAR(CNCL_DATE,'YYYYMMDD') AS ORDER_DT
-                             , ORDER_NO
-                          FROM T_ORDER_CANCEL
-                         WHERE CNCL_DATE &gt;= TO_DATE(#{baseDt},'YYYYMMDD')
-                           AND CNCL_DATE &lt; TO_DATE(#{baseDt},'YYYYMMDD') + 1
-                       ) M
-                     , T_ORDER A
-                     , T_ORDER_INFO B
-                     , T_GOODS C
-                     , T_HAPPYCON_COUPON_MULTI D
-                 WHERE M.ORDER_NO = A.ORDER_NO
-                   AND A.ORDER_CODE = B.ORDER_CODE
-                   AND A.ORDER_NO = B.ORDER_NO
-                   AND B.GOODS_CODE = C.GOODS_CODE
-                   AND A.ORDER_NO = D.ORDER_NO
-                   AND A.MTPL_SEND_YN = '1'
-                   AND C.GOODS_TYPE IN ('0','6','7')
-                 GROUP BY M.ORDER_DT
+              SELECT /*+ USE_NL(M A B C D) INDEX(A T_ORDER_IDX1) INDEX(C T_GOODS_PK) */
+                  M.ORDER_DT
+                   , B.GOODS_CODE                                                 AS GOODS_CODE
+                   , B.BRAND_CODE                                                 AS BRAND_CODE
+                   , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END) AS GIFT_TYPE
+                   , 0                                                            AS ORDER_CNT
+                   , 0                                                            AS ORDER_AMT
+                   , COUNT(*)                                                     AS ORDER_CNCL_CNT
+                   , SUM(B.ORDER_AMT / B.ORDER_QTY)                               AS ORDER_CNCL_AMT
+              FROM (SELECT DISTINCT TO_CHAR(CNCL_DATE, 'YYYYMMDD') AS ORDER_DT
+                                  , ORDER_NO
+                    FROM T_ORDER_CANCEL
+                    WHERE CNCL_DATE &gt;= TO_DATE(#{baseDt}, 'YYYYMMDD')
+                      AND CNCL_DATE &lt; TO_DATE(#{baseDt}, 'YYYYMMDD') + 1) M
+                 , T_ORDER A
+                 , T_ORDER_INFO B
+                 , T_GOODS C
+                 , T_HAPPYCON_COUPON_MULTI D
+              WHERE M.ORDER_NO = A.ORDER_NO
+                AND A.ORDER_CODE = B.ORDER_CODE
+                AND A.ORDER_NO = B.ORDER_NO
+                AND B.GOODS_CODE = C.GOODS_CODE
+                AND A.ORDER_NO = D.ORDER_NO
+                AND A.MTPL_SEND_YN = '1'
+                AND C.GOODS_TYPE IN ('0', '6', '7')
+              GROUP BY M.ORDER_DT
                      , B.GOODS_CODE
                      , B.BRAND_CODE
-                     , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END)
-               ) PA
-         GROUP BY PA.ORDER_DT
-             , PA.GOODS_CODE
-             , PA.GIFT_TYPE
-             , PA.BRAND_CODE
+                     , (CASE WHEN A.USER_PHONE = D.RCV_PHONE THEN 'M' ELSE 'G' END)) PA
+        GROUP BY PA.ORDER_DT
+               , PA.GOODS_CODE
+               , PA.GIFT_TYPE
+               , PA.BRAND_CODE
     </insert>
 
 </mapper>

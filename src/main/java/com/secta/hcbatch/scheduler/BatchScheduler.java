@@ -16,12 +16,20 @@ public class BatchScheduler {
     private final JobLauncher jobLauncher;
     private final Job dayGoodsSumJob;
     private final Job orderPrvaMaskJob;
+    private final Job hcSendMsgJob;
+    private final Job hconSyncJob;
 
-    public BatchScheduler(JobLauncher jobLauncher, Job dayGoodsSumJob, Job orderPrvaMaskJob) {
+    public BatchScheduler(JobLauncher jobLauncher,
+                          Job dayGoodsSumJob,
+                          Job orderPrvaMaskJob,
+                          Job hcSendMsgJob,
+                          Job hconSyncJob) {
         this.jobLauncher = jobLauncher;
         this.dayGoodsSumJob = dayGoodsSumJob;
         this.orderPrvaMaskJob = orderPrvaMaskJob;
-        log.info("BatchScheduler 초기화 완료 - Job: {}", dayGoodsSumJob.getName());
+        this.hcSendMsgJob = hcSendMsgJob;
+        this.hconSyncJob = hconSyncJob;
+        log.info("BatchScheduler 초기화 완료");
     }
 
     /**
@@ -30,7 +38,7 @@ public class BatchScheduler {
      * - 테스트: 매분마다 실행
      */
     /*@Scheduled(cron = "0 0 2 * * *") // 운영*/
-    /*@Scheduled(cron = "0 * * * * *")     // 테스트: 매분 0초*/
+    /*@Scheduled(cron = "0 * * * * *") // 테스트: 매분 0초*/
     public void run() {
         log.info("========================================");
         log.info("배치 스케줄러 시작");
@@ -90,5 +98,23 @@ public class BatchScheduler {
         } catch (Exception e) {
             log.error("Job 실행 실패: {}", job.getName(), e);
         }
+    }
+
+    /**
+     * MMS 발송 Job 스케줄러
+     * - 7초 간격으로 실행
+     */
+    /*@Scheduled(fixedDelay = 7000)*/
+    public void runHcSendMsgJob() {
+        runJob(hcSendMsgJob);
+    }
+
+    /**
+     * 상품권 동기화 Job 스케줄러
+     * - 5초 간격으로 실행
+     */
+    /*@Scheduled(fixedDelay = 5000)*/
+    public void runHconSyncJob() {
+        runJob(hconSyncJob);
     }
 }

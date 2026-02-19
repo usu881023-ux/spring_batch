@@ -43,6 +43,20 @@ spring:
         max-lifetime: 1800000
         pool-name: HikariCP-MALL
 
+    # 해피콘 DB 설정 (DS_HCON)
+    hcon:
+      jdbc-url: jdbc:oracle:thin:@dev-hp-oracle.cpga6vb5eutl.ap-northeast-2.rds.amazonaws.com:1521:ORCL
+      username: HCMALL_DEV
+      password: oTDF1SVibm
+      driver-class-name: oracle.jdbc.OracleDriver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        pool-name: HikariCP-HCON
+
   # JPA 설정
   jpa:
     open-in-view: false
@@ -62,10 +76,10 @@ spring:
 logging:
   level:
     root: INFO
-    com.secta.hcbatch: DEBUG
-    org.springframework.batch: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    com.secta.hcbatch: INFO
+    org.springframework.batch: INFO
+    org.hibernate.SQL: INFO
+    org.hibernate.type.descriptor.sql.BasicBinder: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
@@ -80,3 +94,20 @@ batch:
   pool-size: 5
   queue-capacity: 10
   commit-interval: 100
+  # Lock 파일 경로
+  lock:
+    path: ./locks
+  # MMS 이미지 로컬 경로
+  mms:
+    local-path: ./mms
+  # HC API URL
+  hc-api:
+    url: https://dev-hc.happypointcard.com
+
+# AWS S3 설정
+aws:
+  s3:
+    access-key: AKIA3X5G6LP23ZGC36E4
+    secret-key: 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
+    bucket-name: happy-objects
+    region: ap-northeast-2

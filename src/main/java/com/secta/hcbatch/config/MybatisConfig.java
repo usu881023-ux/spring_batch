@@ -1,6 +1,7 @@
 package com.secta.hcbatch.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.SqlSessionTemplate;
@@ -49,6 +50,16 @@ public class MybatisConfig {
     }
 
     /**
+     * HCON SqlSessionFactory (해피콘 DB)
+     */
+    @Bean(name = "hconSqlSessionFactory")
+    public SqlSessionFactory hconSqlSessionFactory(
+            @Qualifier("hconDataSource") DataSource dataSource) throws Exception {
+        log.info("Initializing HCON SqlSessionFactory");
+        return createSqlSessionFactory(dataSource);
+    }
+
+    /**
      * PRVA SqlSessionTemplate
      */
     @Primary
@@ -65,6 +76,36 @@ public class MybatisConfig {
     public SqlSessionTemplate mallSqlSessionTemplate(
             @Qualifier("mallSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
         return new SqlSessionTemplate(sqlSessionFactory);
+    }
+
+    /**
+     * HCON SqlSessionTemplate (해피콘 DB)
+     */
+    @Bean(name = "hconSqlSessionTemplate")
+    public SqlSessionTemplate hconSqlSessionTemplate(
+            @Qualifier("hconSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
+        return new SqlSessionTemplate(sqlSessionFactory);
+    }
+
+    /**
+     * PRVA Batch SqlSessionTemplate (ExecutorType.BATCH)
+     * - INSERT/UPDATE를 모아서 일괄 flush하여 DB round-trip 최소화
+     */
+    @Bean(name = "prvaBatchSqlSessionTemplate")
+    public SqlSessionTemplate prvaBatchSqlSessionTemplate(
+            @Qualifier("prvaSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
+        log.info("Initializing PRVA Batch SqlSessionTemplate (ExecutorType.BATCH)");
+        return new SqlSessionTemplate(sqlSessionFactory, ExecutorType.BATCH);
+    }
+
+    /**
+     * HCON Batch SqlSessionTemplate (ExecutorType.BATCH)
+     */
+    @Bean(name = "hconBatchSqlSessionTemplate")
+    public SqlSessionTemplate hconBatchSqlSessionTemplate(
+            @Qualifier("hconSqlSessionFactory") SqlSessionFactory sqlSessionFactory) {
+        log.info("Initializing HCON Batch SqlSessionTemplate (ExecutorType.BATCH)");
+        return new SqlSessionTemplate(sqlSessionFactory, ExecutorType.BATCH);
     }
 
     /**

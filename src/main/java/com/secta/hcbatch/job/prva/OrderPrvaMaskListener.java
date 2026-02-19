@@ -19,11 +19,11 @@ public class OrderPrvaMaskListener implements JobExecutionListener {
     @Override
     public void beforeJob(JobExecution jobExecution) {
         log.info("╔═══════════════════════════════════════════════════════════╗");
-        log.info("║  OrderPrvaMask Job 시작                                   ║");
-        log.info("║  Job Name: {}                          ║", jobExecution.getJobInstance().getJobName());
-        log.info("║  Job Instance ID: {}                                   ║", jobExecution.getJobInstance().getId());
-        log.info("║  Job Execution ID: {}                                  ║", jobExecution.getId());
-        log.info("║  Parameters: {}                        ║", jobExecution.getJobParameters());
+        log.info("║  OrderPrvaMask Job 시작                                    ║");
+        log.info("║  Job Name: {}                                             ║", jobExecution.getJobInstance().getJobName());
+        log.info("║  Job Instance ID: {}                                      ║", jobExecution.getJobInstance().getId());
+        log.info("║  Job Execution ID: {}                                     ║", jobExecution.getId());
+        log.info("║  Parameters: {}                                           ║", jobExecution.getJobParameters());
         log.info("╚═══════════════════════════════════════════════════════════╝");
     }
 
@@ -35,12 +35,12 @@ public class OrderPrvaMaskListener implements JobExecutionListener {
         
         log.info("╔═══════════════════════════════════════════════════════════╗");
         log.info("║  OrderPrvaMask Job 종료                                   ║");
-        log.info("║  Status: {}                                      ║", jobExecution.getStatus());
-        log.info("║  Exit Code: {}                                  ║", jobExecution.getExitStatus().getExitCode());
-        log.info("║  Duration: {} ms ({} sec)                      ║", duration, duration / 1000);
+        log.info("║  Status: {}                                              ║", jobExecution.getStatus());
+        log.info("║  Exit Code: {}                                           ║", jobExecution.getExitStatus().getExitCode());
+        log.info("║  Duration: {} ms ({} sec)                                ║", duration, duration / 1000);
         
         if (jobExecution.getAllFailureExceptions().size() > 0) {
-            log.error("║  Failures: {}                                          ║", 
+            log.error("║  Failures: {}                                       ║",
                     jobExecution.getAllFailureExceptions().size());
             jobExecution.getAllFailureExceptions().forEach(e -> 
                     log.error("║    - {}", e.getMessage()));
